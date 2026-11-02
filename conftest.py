@@ -1,6 +1,7 @@
 from contextlib import closing
 
 import pytest
+
 from inventory_db import connect, create_tables
 from seed_db import load_sample_data
 
