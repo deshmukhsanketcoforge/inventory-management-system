@@ -51,6 +51,7 @@ Constraints:
 - `unit_price` is in cents, with `CHECK (unit_price >= 0)`.
 - `quantity_in_stock` defaults to 0, with `CHECK (quantity_in_stock >= 0)`.
 - `reorder_level` is the stock count at or below which a product counts as low stock, with `CHECK (reorder_level >= 0)`.
+- Index on `supplier_id`, used by search and the stock value by supplier report.
 
 ### 3. sales
 
@@ -82,6 +83,7 @@ Constraints:
 - `product_id` is a foreign key to `products(product_id)`. This also blocks deleting a product that has sales history.
 - `quantity` has `CHECK (quantity > 0)`.
 - `price_charged_per_unit` is in cents, with `CHECK (price_charged_per_unit >= 0)`.
+- Index on `product_id`, used by the sales by product report, the never sold report and the delete check.
 
 ### 5. stock_movements
 
@@ -114,14 +116,14 @@ Constraints:
 ### Files
 
 - `inventory_db.py`: connection, tables and all inventory functions.
-- `seed_db.py`: sample data only (`load_sample_data`, `print_row_counts`), plus a `main()` that creates the tables and seeds them.
+- `seed_db.py`: sample data only (`load_sample_data`, `print_row_counts`), plus a `main()` that creates the tables and seeds them. `main()` skips the sample data if the `suppliers` table already has rows, so running it twice (for example on a reused Docker volume) does not fail or duplicate data. It still prints the row counts.
 - `main.py`: the terminal menu. It turns errors into friendly messages.
 
 ### Database setup
 
 | Function | Inputs | Returns |
 |---|---|---|
-| `connect` | `db_path=None` (falls back to `INVENTORY_DB`, then a file next to the code) | A connection with foreign keys on and rows readable by column name |
+| `connect` | `db_path=None` (falls back to `INVENTORY_DB`, then `data/inventory.db` next to the code) | A connection with foreign keys on and rows readable by column name |
 | `create_tables` | `connection` | Nothing. Runs `schema.sql`|
 
 ### Products
@@ -259,3 +261,9 @@ The data survives because it lives on the volume, not in the container. The old 
 ### Changelog
 
 `CHANGELOG.md` has one entry per version: 1.0.0 lists the initial features, and 1.1.0 lists the low stock banner.
+
+## Changes to the plan
+
+- The default database file is `data/inventory.db` next to the code (was a file next to the code). `connect()` creates the `data/` folder if it is missing.
+- `seed_db.py` `main()` now skips loading when the database already has data, instead of failing on the unique supplier name.
+- CI uses `actions/checkout@v7` and `actions/setup-python@v7`, and the lint step is `ruff check .`.
