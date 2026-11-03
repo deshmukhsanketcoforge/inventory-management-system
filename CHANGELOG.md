@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.1.0 - 2026-11-02
+## 1.1.0 - 2026-11-03
 
 ### Added
 - When the menu starts, a banner shows the number of low stock products.
