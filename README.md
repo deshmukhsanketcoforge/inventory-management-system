@@ -95,7 +95,7 @@ python seed_db.py
 python main.py
 ```
 
-The menu offers: search with filters, look up a product, add a product, restock, record a sale, the four reports, and a database backup. Money is typed and shown with two decimals (`12.99`). A problem (a broken rule, a missing product, letters where a number is expected) prints a message starting with `Error:` and returns to the menu. Press `0` to quit.
+The menu offers: search with filters, look up a product, add a product, restock, record a sale, the four reports, and a database backup. Money is typed and shown with two decimals (`12.99`). A problem (a broken rule, a missing product, letters where a number is expected) prints a message starting with `Error:` and returns to the menu. When the menu starts it shows a banner with the number of low stock products (at or below their reorder level). Press `0` to quit.
 
 ## Backup and restore
 

@@ -141,3 +141,18 @@ def test_a_backup_to_a_missing_folder_shows_a_database_error(db, monkeypatch, ca
     missing = tmp_path / "no_such_folder" / "backup.db"
     output = run_menu_with(db, monkeypatch, capsys, ["10", str(missing), "0"])
     assert "Database error:" in output
+
+
+def test_the_menu_starts_with_the_number_of_low_stock_products(db, monkeypatch, capsys):
+    output = run_menu_with(db, monkeypatch, capsys, ["0"])
+    assert output.startswith("*** Low stock products: 4 ***")
+
+
+def test_the_banner_shows_zero_when_nothing_is_low(empty_db, monkeypatch, capsys):
+    output = run_menu_with(empty_db, monkeypatch, capsys, ["0"])
+    assert "*** Low stock products: 0 ***" in output
+
+
+def test_the_banner_is_shown_only_once(db, monkeypatch, capsys):
+    output = run_menu_with(db, monkeypatch, capsys, ["x", "x", "0"])
+    assert output.count("Low stock products:") == 1
