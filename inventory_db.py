@@ -150,3 +150,24 @@ def search_products(
         " WHERE " + " AND ".join(conditions) + " ORDER BY products.name COLLATE NOCASE",
         values,
     ).fetchall()
+
+
+def stock_value_by_supplier(connection):
+    """Each supplier with the total value of its stock in cents, highest first."""
+    return connection.execute(
+        "SELECT suppliers.name AS supplier_name,"
+        " COALESCE(SUM(products.unit_price * products.quantity_in_stock), 0) AS total_value"
+        " FROM suppliers LEFT JOIN products ON products.supplier_id = suppliers.supplier_id"
+        " GROUP BY suppliers.supplier_id"
+        " ORDER BY total_value DESC, suppliers.name"
+    ).fetchall()
+
+
+def low_stock_report(connection):
+    """Products at or below their reorder level, with how many units short they are."""
+    return connection.execute(
+        "SELECT product_id, name, quantity_in_stock, reorder_level,"
+        " reorder_level - quantity_in_stock AS units_short"
+        " FROM products WHERE quantity_in_stock <= reorder_level"
+        " ORDER BY units_short DESC, name"
+    ).fetchall()
