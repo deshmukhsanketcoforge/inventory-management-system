@@ -5,11 +5,13 @@ from inventory_db import (
     InvalidValueError,
     InventoryError,
     ProductHasSalesError,
+    ProductHasStockHistoryError,
     UnknownSupplierError,
     add_product,
     change_product_price,
     delete_product,
     get_product,
+    restock,
 )
 
 # Seed data: product 1 (Claw Hammer, Acme Tools Co) was sold, product 12 never was.
@@ -96,13 +98,32 @@ def test_a_never_sold_product_can_be_deleted(db):
     assert get_product(db, NEVER_SOLD_PRODUCT) is None
 
 
+def test_a_restocked_but_never_sold_product_cannot_be_deleted(db):
+    restock(db, NEVER_SOLD_PRODUCT, 5)
+    with pytest.raises(ProductHasStockHistoryError):
+        delete_product(db, NEVER_SOLD_PRODUCT)
+    assert get_product(db, NEVER_SOLD_PRODUCT) is not None
+
+
+def test_a_sold_and_restocked_product_reports_its_sales_history(db):
+    restock(db, SOLD_PRODUCT, 5)
+    with pytest.raises(ProductHasSalesError):
+        delete_product(db, SOLD_PRODUCT)
+
+
 def test_deleting_a_missing_product_returns_false(db):
     assert delete_product(db, 999) is False
 
 
 @pytest.mark.parametrize(
     "error",
-    [DuplicateSkuError, UnknownSupplierError, InvalidValueError, ProductHasSalesError],
+    [
+        DuplicateSkuError,
+        UnknownSupplierError,
+        InvalidValueError,
+        ProductHasSalesError,
+        ProductHasStockHistoryError,
+    ],
 )
 def test_every_error_is_an_inventory_error(error):
     assert issubclass(error, InventoryError)

@@ -28,6 +28,10 @@ class ProductHasSalesError(InventoryError):
     pass
 
 
+class ProductHasStockHistoryError(InventoryError):
+    pass
+
+
 class UnknownProductError(InventoryError):
     pass
 
@@ -117,15 +121,25 @@ def change_product_price(connection, product_id, new_price):
 
 
 def delete_product(connection, product_id):
-    """Delete a product. Returns False if it does not exist."""
+    """Delete a product. Returns False if it does not exist.
+
+    A product with sales or stock movements is kept, because they point to it.
+    """
     try:
         with connection:
             cursor = connection.execute(
                 "DELETE FROM products WHERE product_id = ?", (product_id,)
             )
     except sqlite3.IntegrityError as error:
-        raise ProductHasSalesError(
-            "This product has sales history and cannot be deleted."
+        was_sold = connection.execute(
+            "SELECT EXISTS (SELECT 1 FROM sale_items WHERE product_id = ?)", (product_id,)
+        ).fetchone()[0]
+        if was_sold:
+            raise ProductHasSalesError(
+                "This product has sales history and cannot be deleted."
+            ) from error
+        raise ProductHasStockHistoryError(
+            "This product has stock movements and cannot be deleted."
         ) from error
     return cursor.rowcount == 1
 
@@ -220,7 +234,9 @@ def _change_stock(connection, product_id, change, reason, now):
         )
     except sqlite3.IntegrityError as error:
         # The only rule an update can break is stock going below zero.
-        raise InsufficientStockError("Not enough stock for this change.") from error
+        raise InsufficientStockError(
+            f"Not enough stock of product {product_id} for this change."
+        ) from error
     if cursor.rowcount == 0:
         raise UnknownProductError("That product does not exist.")
     connection.execute(

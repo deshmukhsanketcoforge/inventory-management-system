@@ -55,3 +55,33 @@ The sample data has 12 products in 4 categories, 3 products that were never sold
 | Screwdriver Set | 1 | 18.99 |
 
 **Never sold** (`never_sold_products`), sorted by name: Extension Cord 5m, Garden Gloves, Work Light.
+
+
+## Stock changes and sales
+
+`restock`, `adjust_stock` and `record_sale` each run as one transaction (`with connection:`): every step is saved, or none is. Every change to stock also adds a row to `stock_movements` with the reason (`restock`, `adjustment` or `sale`).
+
+### What happens when a sale fails halfway
+
+The sale asks for 2 Claw Hammers (enough in stock) and 6 Concrete Mix (only 5 in stock). The first line is written before the second one fails, then `with connection:` rolls everything back. Real output from the sample data:
+
+```
+Before:
+  sales: 5
+  sale_items: 12
+  stock_movements: 0
+  stock of Claw Hammer (product 1): 40
+  stock of Concrete Mix 20kg (product 5): 5
+
+Call: record_sale(connection, [(1, 2), (5, 6)])
+InsufficientStockError: Not enough stock of product 5 for this change.
+
+After:
+  sales: 5
+  sale_items: 12
+  stock_movements: 0
+  stock of Claw Hammer (product 1): 40
+  stock of Concrete Mix 20kg (product 5): 5
+```
+
+The row counts and both stock levels are the same before and after: no sale row, no lines, no movements and no stock change.
