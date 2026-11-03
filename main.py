@@ -207,8 +207,14 @@ def print_menu():
     print("  0. Quit")
 
 
+def print_low_stock_banner(connection):
+    """Show how many products are at or below their reorder level."""
+    print(f"*** Low stock products: {len(low_stock_report(connection))} ***")
+
+
 def run_menu(connection):
-    """Show the menu until the user quits. Problems are printed, never raised."""
+    """Show the banner once, then the menu until the user quits. Problems are printed."""
+    print_low_stock_banner(connection)
     while True:
         print_menu()
         choice = ask_text("Choose an option: ")
