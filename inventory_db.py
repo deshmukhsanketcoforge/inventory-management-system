@@ -7,6 +7,26 @@ SCHEMA_PATH = CODE_DIR / "schema.sql"
 DEFAULT_DB = str(CODE_DIR / "data" / "inventory.db")
 
 
+class InventoryError(Exception):
+    """Base class, so the menu can catch every inventory problem in one place."""
+
+
+class DuplicateSkuError(InventoryError):
+    pass
+
+
+class UnknownSupplierError(InventoryError):
+    pass
+
+
+class InvalidValueError(InventoryError):
+    pass
+
+
+class ProductHasSalesError(InventoryError):
+    pass
+
+
 def get_db_path(environ=os.environ):
     """Database file from INVENTORY_DB, or data/inventory.db next to the code."""
     return environ.get("INVENTORY_DB", DEFAULT_DB)
@@ -27,3 +47,106 @@ def connect(db_path=None):
 def create_tables(connection):
     """Run schema.sql. Safe to call again, existing tables and data are kept."""
     connection.executescript(SCHEMA_PATH.read_text())
+
+
+def _raise_product_error(error):
+    """Turn the database's IntegrityError into the matching inventory error."""
+    message = str(error)
+    if "UNIQUE" in message:
+        raise DuplicateSkuError("A product with this SKU already exists.") from error
+    if "FOREIGN KEY" in message:
+        raise UnknownSupplierError("That supplier does not exist.") from error
+    if "CHECK" in message:
+        raise InvalidValueError(
+            "Price, quantity and reorder level cannot be negative, "
+            "and SKU, name and category cannot be blank."
+        ) from error
+    raise error
+
+
+def add_product(
+    connection, sku, name, category, supplier_id, unit_price, quantity_in_stock, reorder_level
+):
+    """Add a product and return its new product_id. Prices are in cents."""
+    try:
+        with connection:
+            cursor = connection.execute(
+                "INSERT INTO products (sku, name, category, supplier_id, unit_price,"
+                " quantity_in_stock, reorder_level) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (sku, name, category, supplier_id, unit_price, quantity_in_stock, reorder_level),
+            )
+    except sqlite3.IntegrityError as error:
+        _raise_product_error(error)
+    return cursor.lastrowid
+
+
+def get_product(connection, product_id):
+    """One product with its supplier_name, or None if there is no such product."""
+    return connection.execute(
+        "SELECT products.*, suppliers.name AS supplier_name"
+        " FROM products JOIN suppliers ON suppliers.supplier_id = products.supplier_id"
+        " WHERE products.product_id = ?",
+        (product_id,),
+    ).fetchone()
+
+
+def change_product_price(connection, product_id, new_price):
+    """Set a new price in cents. Returns False if the product does not exist."""
+    try:
+        with connection:
+            cursor = connection.execute(
+                "UPDATE products SET unit_price = ? WHERE product_id = ?",
+                (new_price, product_id),
+            )
+    except sqlite3.IntegrityError as error:
+        _raise_product_error(error)
+    return cursor.rowcount == 1
+
+
+def delete_product(connection, product_id):
+    """Delete a product. Returns False if it does not exist."""
+    try:
+        with connection:
+            cursor = connection.execute(
+                "DELETE FROM products WHERE product_id = ?", (product_id,)
+            )
+    except sqlite3.IntegrityError as error:
+        raise ProductHasSalesError(
+            "This product has sales history and cannot be deleted."
+        ) from error
+    return cursor.rowcount == 1
+
+
+def search_products(
+    connection, text, category=None, max_price=None, in_stock_only=False, low_stock_only=False
+):
+    """Products whose name, SKU or supplier name contains text, ignoring case.
+
+    category also ignores case. max_price is in cents. The filters can be
+    combined. Sorted by name.
+    """
+    # Only fixed pieces of SQL are joined here, every value goes in as a ?
+    conditions = [
+        (
+            "(instr(lower(products.name), lower(?)) > 0"
+            " OR instr(lower(products.sku), lower(?)) > 0"
+            " OR instr(lower(suppliers.name), lower(?)) > 0)"
+        )
+    ]
+    values = [text, text, text]
+    if category is not None:
+        conditions.append("lower(products.category) = lower(?)")
+        values.append(category)
+    if max_price is not None:
+        conditions.append("products.unit_price <= ?")
+        values.append(max_price)
+    if in_stock_only:
+        conditions.append("products.quantity_in_stock > 0")
+    if low_stock_only:
+        conditions.append("products.quantity_in_stock <= products.reorder_level")
+    return connection.execute(
+        "SELECT products.*, suppliers.name AS supplier_name"
+        " FROM products JOIN suppliers ON suppliers.supplier_id = products.supplier_id"
+        " WHERE " + " AND ".join(conditions) + " ORDER BY products.name COLLATE NOCASE",
+        values,
+    ).fetchall()
