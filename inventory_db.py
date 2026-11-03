@@ -1,5 +1,6 @@
 import os
 import sqlite3
+from datetime import datetime
 from pathlib import Path
 
 CODE_DIR = Path(__file__).parent
@@ -24,6 +25,18 @@ class InvalidValueError(InventoryError):
 
 
 class ProductHasSalesError(InventoryError):
+    pass
+
+
+class UnknownProductError(InventoryError):
+    pass
+
+
+class InsufficientStockError(InventoryError):
+    pass
+
+
+class DuplicateProductInSaleError(InventoryError):
     pass
 
 
@@ -192,3 +205,47 @@ def never_sold_products(connection):
         " WHERE product_id NOT IN (SELECT product_id FROM sale_items)"
         " ORDER BY name"
     ).fetchall()
+
+
+def _change_stock(connection, product_id, change, reason, now):
+    """Change a product's stock and log the movement. Never commits (because of complete transaction behavior)
+
+    So a failure here undoes the stock change and the log row together.
+    """
+    try:
+        cursor = connection.execute(
+            "UPDATE products SET quantity_in_stock = quantity_in_stock + ?"
+            " WHERE product_id = ?",
+            (change, product_id),
+        )
+    except sqlite3.IntegrityError as error:
+        # The only rule an update can break is stock going below zero.
+        raise InsufficientStockError("Not enough stock for this change.") from error
+    if cursor.rowcount == 0:
+        raise UnknownProductError("That product does not exist.")
+    connection.execute(
+        "INSERT INTO stock_movements (product_id, change, reason, occurred_at)"
+        " VALUES (?, ?, ?, ?)",
+        (product_id, change, reason, now),
+    )
+
+
+def _current_time(now):
+    """The time given by the caller, or the current time when none was given."""
+    return now if now is not None else datetime.now().isoformat(timespec="seconds")
+
+
+def restock(connection, product_id, amount, now=None):
+    """Add amount (more than zero) to a product's stock and log a restock movement."""
+    if amount <= 0:
+        raise InvalidValueError("A restock amount must be more than zero.")
+    with connection:
+        _change_stock(connection, product_id, amount, "restock", _current_time(now))
+
+
+def adjust_stock(connection, product_id, change, now=None):
+    """Change stock by a signed amount (damage, recount) and log an adjustment movement."""
+    if change == 0:
+        raise InvalidValueError("An adjustment cannot be zero.")
+    with connection:
+        _change_stock(connection, product_id, change, "adjustment", _current_time(now))
