@@ -249,3 +249,31 @@ def adjust_stock(connection, product_id, change, now=None):
         raise InvalidValueError("An adjustment cannot be zero.")
     with connection:
         _change_stock(connection, product_id, change, "adjustment", _current_time(now))
+
+
+def record_sale(connection, items, now=None):
+    """Record a sale of (product_id, quantity) pairs and return the new sale_id."""
+    product_ids = [product_id for product_id, _ in items]
+    if not items:
+        raise InvalidValueError("A sale needs at least one product.")
+    if len(set(product_ids)) != len(product_ids):
+        raise DuplicateProductInSaleError("The same product cannot appear twice in one sale.")
+    if any(quantity <= 0 for _, quantity in items):
+        raise InvalidValueError("Each quantity in a sale must be more than zero.")
+
+    now = _current_time(now)
+    with connection:
+        sale_id = connection.execute("INSERT INTO sales (sold_at) VALUES (?)", (now,)).lastrowid
+        for product_id, quantity in items:
+            product = connection.execute(
+                "SELECT unit_price FROM products WHERE product_id = ?", (product_id,)
+            ).fetchone()
+            if product is None:
+                raise UnknownProductError(f"Product {product_id} does not exist.")
+            connection.execute(
+                "INSERT INTO sale_items (sale_id, product_id, quantity, price_charged_per_unit)"
+                " VALUES (?, ?, ?, ?)",
+                (sale_id, product_id, quantity, product["unit_price"]),
+            )
+            _change_stock(connection, product_id, -quantity, "sale", now)
+    return sale_id
