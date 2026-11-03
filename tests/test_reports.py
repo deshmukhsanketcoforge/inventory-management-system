@@ -1,4 +1,10 @@
-from inventory_db import add_product, low_stock_report, stock_value_by_supplier
+from inventory_db import (
+    add_product,
+    low_stock_report,
+    never_sold_products,
+    sales_by_product,
+    stock_value_by_supplier,
+)
 
 
 def test_stock_value_by_supplier_is_highest_first(db):
@@ -37,3 +43,39 @@ def test_low_stock_report_leaves_out_well_stocked_products(db):
     assert "Claw Hammer" not in names
     add_product(db, "HT-099", "Tape Measure", "Hand Tools", 1, 799, 15, 5)
     assert "Tape Measure" not in [row["name"] for row in low_stock_report(db)]
+
+
+def test_sales_by_product_has_units_and_revenue_highest_first(db):
+    rows = sales_by_product(db)
+    assert [(row["name"], row["units_sold"], row["revenue"]) for row in rows] == [
+        ("Wood Screws Box", 30, 19470),
+        ("LED Bulb 4-Pack", 10, 7990),
+        ("Claw Hammer", 3, 3897),
+        ("Pruning Shears", 2, 3500),
+        ("Plywood Sheet", 1, 3499),
+        ("Adjustable Wrench", 2, 3098),
+        ("Concrete Mix 20kg", 3, 2697),
+        ("Garden Hose 15m", 1, 2499),
+        ("Screwdriver Set", 1, 1899),
+    ]
+
+
+def test_sales_by_product_uses_the_price_charged_at_the_time(db):
+    db.execute("UPDATE products SET unit_price = 5000 WHERE name = 'Claw Hammer'")
+    hammer = next(row for row in sales_by_product(db) if row["name"] == "Claw Hammer")
+    assert hammer["revenue"] == 3897
+
+
+def test_sales_by_product_is_empty_when_nothing_was_sold(empty_db):
+    assert sales_by_product(empty_db) == []
+
+
+def test_never_sold_products_lists_products_in_no_sale(db):
+    rows = never_sold_products(db)
+    assert [row["name"] for row in rows] == ["Extension Cord 5m", "Garden Gloves", "Work Light"]
+
+
+def test_a_product_leaves_the_never_sold_report_once_it_is_sold(db):
+    db.execute("INSERT INTO sale_items VALUES (1, 12, 1, 599)")
+    names = [row["name"] for row in never_sold_products(db)]
+    assert "Garden Gloves" not in names

@@ -39,3 +39,19 @@ The sample data has 12 products in 4 categories, 3 products that were never sold
 | Screwdriver Set | 2 |
 | Work Light | 2 |
 | Extension Cord 5m | 0 |
+
+**Sales by product** (`sales_by_product`), sold products only, highest revenue first:
+
+| Product | Units sold | Revenue |
+|---|---|---|
+| Wood Screws Box | 30 | 194.70 |
+| LED Bulb 4-Pack | 10 | 79.90 |
+| Claw Hammer | 3 | 38.97 |
+| Pruning Shears | 2 | 35.00 |
+| Plywood Sheet | 1 | 34.99 |
+| Adjustable Wrench | 2 | 30.98 |
+| Concrete Mix 20kg | 3 | 26.97 |
+| Garden Hose 15m | 1 | 24.99 |
+| Screwdriver Set | 1 | 18.99 |
+
+**Never sold** (`never_sold_products`), sorted by name: Extension Cord 5m, Garden Gloves, Work Light.
