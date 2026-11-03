@@ -1,5 +1,6 @@
 import os
 import sqlite3
+from datetime import datetime
 from pathlib import Path
 
 CODE_DIR = Path(__file__).parent
@@ -24,6 +25,22 @@ class InvalidValueError(InventoryError):
 
 
 class ProductHasSalesError(InventoryError):
+    pass
+
+
+class ProductHasStockHistoryError(InventoryError):
+    pass
+
+
+class UnknownProductError(InventoryError):
+    pass
+
+
+class InsufficientStockError(InventoryError):
+    pass
+
+
+class DuplicateProductInSaleError(InventoryError):
     pass
 
 
@@ -104,15 +121,25 @@ def change_product_price(connection, product_id, new_price):
 
 
 def delete_product(connection, product_id):
-    """Delete a product. Returns False if it does not exist."""
+    """Delete a product. Returns False if it does not exist.
+
+    A product with sales or stock movements is kept, because they point to it.
+    """
     try:
         with connection:
             cursor = connection.execute(
                 "DELETE FROM products WHERE product_id = ?", (product_id,)
             )
     except sqlite3.IntegrityError as error:
-        raise ProductHasSalesError(
-            "This product has sales history and cannot be deleted."
+        was_sold = connection.execute(
+            "SELECT EXISTS (SELECT 1 FROM sale_items WHERE product_id = ?)", (product_id,)
+        ).fetchone()[0]
+        if was_sold:
+            raise ProductHasSalesError(
+                "This product has sales history and cannot be deleted."
+            ) from error
+        raise ProductHasStockHistoryError(
+            "This product has stock movements and cannot be deleted."
         ) from error
     return cursor.rowcount == 1
 
@@ -192,3 +219,77 @@ def never_sold_products(connection):
         " WHERE product_id NOT IN (SELECT product_id FROM sale_items)"
         " ORDER BY name"
     ).fetchall()
+
+
+def _change_stock(connection, product_id, change, reason, now):
+    """Change a product's stock and log the movement. Never commits (because of complete transaction behavior)
+
+    So a failure here undoes the stock change and the log row together.
+    """
+    try:
+        cursor = connection.execute(
+            "UPDATE products SET quantity_in_stock = quantity_in_stock + ?"
+            " WHERE product_id = ?",
+            (change, product_id),
+        )
+    except sqlite3.IntegrityError as error:
+        # The only rule an update can break is stock going below zero.
+        raise InsufficientStockError(
+            f"Not enough stock of product {product_id} for this change."
+        ) from error
+    if cursor.rowcount == 0:
+        raise UnknownProductError("That product does not exist.")
+    connection.execute(
+        "INSERT INTO stock_movements (product_id, change, reason, occurred_at)"
+        " VALUES (?, ?, ?, ?)",
+        (product_id, change, reason, now),
+    )
+
+
+def _current_time(now):
+    """The time given by the caller, or the current time when none was given."""
+    return now if now is not None else datetime.now().isoformat(timespec="seconds")
+
+
+def restock(connection, product_id, amount, now=None):
+    """Add amount (more than zero) to a product's stock and log a restock movement."""
+    if amount <= 0:
+        raise InvalidValueError("A restock amount must be more than zero.")
+    with connection:
+        _change_stock(connection, product_id, amount, "restock", _current_time(now))
+
+
+def adjust_stock(connection, product_id, change, now=None):
+    """Change stock by a signed amount (damage, recount) and log an adjustment movement."""
+    if change == 0:
+        raise InvalidValueError("An adjustment cannot be zero.")
+    with connection:
+        _change_stock(connection, product_id, change, "adjustment", _current_time(now))
+
+
+def record_sale(connection, items, now=None):
+    """Record a sale of (product_id, quantity) pairs and return the new sale_id."""
+    product_ids = [product_id for product_id, _ in items]
+    if not items:
+        raise InvalidValueError("A sale needs at least one product.")
+    if len(set(product_ids)) != len(product_ids):
+        raise DuplicateProductInSaleError("The same product cannot appear twice in one sale.")
+    if any(quantity <= 0 for _, quantity in items):
+        raise InvalidValueError("Each quantity in a sale must be more than zero.")
+
+    now = _current_time(now)
+    with connection:
+        sale_id = connection.execute("INSERT INTO sales (sold_at) VALUES (?)", (now,)).lastrowid
+        for product_id, quantity in items:
+            product = connection.execute(
+                "SELECT unit_price FROM products WHERE product_id = ?", (product_id,)
+            ).fetchone()
+            if product is None:
+                raise UnknownProductError(f"Product {product_id} does not exist.")
+            connection.execute(
+                "INSERT INTO sale_items (sale_id, product_id, quantity, price_charged_per_unit)"
+                " VALUES (?, ?, ?, ?)",
+                (sale_id, product_id, quantity, product["unit_price"]),
+            )
+            _change_stock(connection, product_id, -quantity, "sale", now)
+    return sale_id

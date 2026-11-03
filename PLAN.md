@@ -133,7 +133,7 @@ Constraints:
 | `add_product` | `connection, sku, name, category, supplier_id, unit_price, quantity_in_stock, reorder_level` | The new `product_id` | `DuplicateSkuError`, `UnknownSupplierError`, `InvalidValueError` (negative price or quantity) |
 | `get_product` | `connection, product_id` | One row with all product columns plus `supplier_name` (joined from suppliers), or `None` | none |
 | `change_product_price` | `connection, product_id, new_price` | `True` if updated, `False` if the product does not exist | `InvalidValueError` (negative price) |
-| `delete_product` | `connection, product_id` | `True` if deleted, `False` if it does not exist | `ProductHasSalesError` (the product appears in `sale_items`) |
+| `delete_product` | `connection, product_id` | `True` if deleted, `False` if it does not exist | `ProductHasSalesError` (the product appears in `sale_items`), `ProductHasStockHistoryError` (it has `stock_movements` but no sales) |
 
 ### Search
 
@@ -186,6 +186,7 @@ All errors inherit from `InventoryError` so the menu can catch them in one place
 | `InsufficientStockError` | There is not enough stock for the sale, or an adjustment would go below zero |
 | `DuplicateProductInSaleError` | The same product appears twice in one sale |
 | `ProductHasSalesError` | A product with sales history is deleted |
+| `ProductHasStockHistoryError` | A product with stock movements but no sales is deleted |
 
 ## Transaction Steps
 
