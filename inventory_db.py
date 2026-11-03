@@ -1,5 +1,6 @@
 import os
 import sqlite3
+from contextlib import closing
 from datetime import datetime
 from pathlib import Path
 
@@ -293,3 +294,12 @@ def record_sale(connection, items, now=None):
             )
             _change_stock(connection, product_id, -quantity, "sale", now)
     return sale_id
+
+
+def backup_database(connection, backup_path):
+    """Copy the whole database to backup_path using SQLite's backup function.
+
+    The copy is a consistent snapshot, even while the database is in use.
+    """
+    with closing(sqlite3.connect(backup_path)) as backup:
+        connection.backup(backup)

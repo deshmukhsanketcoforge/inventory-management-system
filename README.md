@@ -85,3 +85,57 @@ After:
 ```
 
 The row counts and both stock levels are the same before and after: no sale row, no lines, no movements and no stock change.
+
+## The menu
+
+Load the sample data once, then start the menu:
+
+```
+python seed_db.py
+python main.py
+```
+
+The menu offers: search with filters, look up a product, add a product, restock, record a sale, the four reports, and a database backup. Money is typed and shown with two decimals (`12.99`). A problem (a broken rule, a missing product, letters where a number is expected) prints a message starting with `Error:` and returns to the menu. Press `0` to quit.
+
+## Backup and restore
+
+**Back up.** Choose option 10 in the menu and type a file name (or press Enter for `backup.db`). The copy is made with SQLite's backup function, so it is a consistent snapshot even while the database is in use.
+
+**Check the copy.** It must pass `PRAGMA integrity_check` and have the same row counts as the original. Real output, after backing up the freshly seeded database to `data/backup.db`:
+
+```
+python - <<'EOF'
+from contextlib import closing
+from inventory_db import connect
+from seed_db import COUNT_ROWS_SQL
+for path in ("data/inventory.db", "data/backup.db"):
+    with closing(connect(path)) as connection:
+        print(path)
+        print("  integrity_check:", connection.execute("PRAGMA integrity_check").fetchone()[0])
+        for table, count in connection.execute(COUNT_ROWS_SQL):
+            print(f"  {table}: {count}")
+EOF
+```
+
+```
+data/inventory.db
+  integrity_check: ok
+  suppliers: 4
+  products: 12
+  sales: 5
+  sale_items: 12
+  stock_movements: 0
+data/backup.db
+  integrity_check: ok
+  suppliers: 4
+  products: 12
+  sales: 5
+  sale_items: 12
+  stock_movements: 0
+```
+
+**Restore.** Stop the program, replace the database file with the backup copy, then start again and run the check above on the restored file:
+
+```
+cp data/backup.db data/inventory.db
+```
