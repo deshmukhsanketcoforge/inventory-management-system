@@ -137,9 +137,16 @@ def test_backing_up_through_the_menu_writes_a_copy(db, monkeypatch, capsys, tmp_
         assert backup.execute("SELECT COUNT(*) FROM products").fetchone()[0] == 12
 
 
-def test_a_backup_to_a_missing_folder_shows_a_database_error(db, monkeypatch, capsys, tmp_path):
-    missing = tmp_path / "no_such_folder" / "backup.db"
-    output = run_menu_with(db, monkeypatch, capsys, ["10", str(missing), "0"])
+def test_a_backup_to_a_missing_folder_creates_the_folder(db, monkeypatch, capsys, tmp_path):
+    backup_path = tmp_path / "new_folder" / "backup.db"
+    output = run_menu_with(db, monkeypatch, capsys, ["10", str(backup_path), "0"])
+    assert f"Backup saved to {backup_path}." in output
+    assert backup_path.exists()
+
+
+def test_a_backup_that_cannot_be_written_shows_a_database_error(db, monkeypatch, capsys, tmp_path):
+    # tmp_path is a folder, so it cannot be used as the backup file
+    output = run_menu_with(db, monkeypatch, capsys, ["10", str(tmp_path), "0"])
     assert "Database error:" in output
 
 

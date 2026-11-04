@@ -1,6 +1,6 @@
 import pytest
 
-from seed_db import main, print_row_counts
+from seed_db import COUNT_ROWS_SQL, main, print_row_counts
 
 
 @pytest.mark.parametrize(
@@ -14,8 +14,8 @@ from seed_db import main, print_row_counts
     ],
 )
 def test_seed_row_counts(db, table, expected):
-    count = db.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
-    assert count == expected
+    counts = dict(tuple(row) for row in db.execute(COUNT_ROWS_SQL))
+    assert counts[table] == expected
 
 
 def test_seed_has_at_least_three_categories(db):

@@ -1,8 +1,39 @@
 # inventory-management-system
 
+## What it does
+
+A hardware store's inventory system. It keeps suppliers, products, sales, the items in each sale, and a log of every stock movement in a SQLite database. From a terminal menu you can search products with filters, look up, add and restock products, record sales that are saved completely or not at all, run four reports, and back up the database.
+
+## How to run it
+
+```
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+python seed_db.py
+python main.py
+```
+
+`seed_db.py` creates the tables and loads the sample data. `main.py` starts the menu.
+
+## Configuration
+
+The database file location is read from the `INVENTORY_DB` environment variable. When it is not set, the database is `data/inventory.db` next to the code. The Docker image sets it to `/data/inventory.db`.
+
+```
+INVENTORY_DB=/tmp/test.db python main.py
+```
+
+## How to run the tests
+
+```
+pytest -q
+ruff check .
+```
+
 ## Database and sample data
 
-The tables are defined in `schema.sql`. `seed_db.py` creates them and loads the sample data. The database file is `data/inventory.db` next to the code, or the path in the `INVENTORY_DB` environment variable.
+The tables are defined in `schema.sql`. `seed_db.py` creates them and loads the sample data. Run it once to create the database (see Configuration for where the file goes).
 
 ```
 python seed_db.py
@@ -87,13 +118,6 @@ After:
 The row counts and both stock levels are the same before and after: no sale row, no lines, no movements and no stock change.
 
 ## The menu
-
-Load the sample data once, then start the menu:
-
-```
-python seed_db.py
-python main.py
-```
 
 The menu offers: search with filters, look up a product, add a product, restock, record a sale, the four reports, and a database backup. Money is typed and shown with two decimals (`12.99`). A problem (a broken rule, a missing product, letters where a number is expected) prints a message starting with `Error:` and returns to the menu. When the menu starts it shows a banner with the number of low stock products (at or below their reorder level). Press `0` to quit.
 
@@ -258,3 +282,150 @@ $ docker run -i --rm -v inventory_data:/data inventory:dev   (a NEW container: l
 ```
 
 The stock of Claw Hammer is 50 in the new container, so the data survived. Without `-v inventory_data:/data` the data would be lost when the container is removed.
+
+## Rolling back
+
+Version 1.1.0 only adds the low stock banner. It changes no tables and no data, so the same database volume works with both versions. To roll back, stop the 1.1.0 container and start the 1.0.0 image on the same volume:
+
+```
+docker run -it --rm -v inventory_data:/data inventory:1.0.0
+```
+
+Take a backup first (see Backup and restore).
+
+Real output. I seeded with 1.1.0, restocked Concrete Mix 20kg by 20 (stock 5 → 25), then started the 1.0.0 image on the same volume. The data is still there, and the banner is gone because 1.0.0 doesn't have it.
+
+```
+(.venv) Sanket.Deshmukh@Sankets-MacBook-Pro inventory-management-system % docker images inventory
+
+                                                                                            i Info →   U  In Use
+IMAGE             ID             DISK USAGE   CONTENT SIZE   EXTRA
+inventory:1.0.0   52b0a7f65b3d        269MB         61.4MB        
+inventory:1.1.0   e1087825c1f1        269MB         61.4MB        
+(.venv) Sanket.Deshmukh@Sankets-MacBook-Pro inventory-management-system % docker run --rm -v inventory_data:/data inventory:1.1.0 python seed_db.py
+
+suppliers: 4
+products: 12
+sales: 5
+sale_items: 12
+stock_movements: 0
+(.venv) Sanket.Deshmukh@Sankets-MacBook-Pro inventory-management-system % docker run -it --rm -v inventory_data:/data inventory:1.1.0
+
+*** Low stock products: 4 ***
+
+Inventory menu
+  1. Search products
+  2. Look up a product
+  3. Add a product
+  4. Restock a product
+  5. Record a sale
+  6. Report: stock value by supplier
+  7. Report: low stock
+  8. Report: sales by product
+  9. Report: never sold
+  10. Back up the database
+  0. Quit
+Choose an option: 4
+Product id: 5
+Amount to add: 20
+Restocked. Concrete Mix 20kg now has 25 in stock.
+
+Inventory menu
+  1. Search products
+  2. Look up a product
+  3. Add a product
+  4. Restock a product
+  5. Record a sale
+  6. Report: stock value by supplier
+  7. Report: low stock
+  8. Report: sales by product
+  9. Report: never sold
+  10. Back up the database
+  0. Quit
+Choose an option: 0
+(.venv) Sanket.Deshmukh@Sankets-MacBook-Pro inventory-management-system % docker run -it --rm -v inventory_data:/data inventory:1.0.0
+
+
+Inventory menu
+  1. Search products
+  2. Look up a product
+  3. Add a product
+  4. Restock a product
+  5. Record a sale
+  6. Report: stock value by supplier
+  7. Report: low stock
+  8. Report: sales by product
+  9. Report: never sold
+  10. Back up the database
+  0. Quit
+Choose an option: 2
+Product id: 5
+ID | SKU | Name | Category | Supplier | Price | In stock | Reorder at
+5 | BM-002 | Concrete Mix 20kg | Building Materials | BuildRight Supply | 8.99 | 25 | 15
+
+Inventory menu
+  1. Search products
+  2. Look up a product
+  3. Add a product
+  4. Restock a product
+  5. Record a sale
+  6. Report: stock value by supplier
+  7. Report: low stock
+  8. Report: sales by product
+  9. Report: never sold
+  10. Back up the database
+  0. Quit
+Choose an option: 0
+(.venv) Sanket.Deshmukh@Sankets-MacBook-Pro inventory-management-system % docker run -it --rm -v inventory_data:/data inventory:1.1.0
+
+*** Low stock products: 3 ***
+
+Inventory menu
+  1. Search products
+  2. Look up a product
+  3. Add a product
+  4. Restock a product
+  5. Record a sale
+  6. Report: stock value by supplier
+  7. Report: low stock
+  8. Report: sales by product
+  9. Report: never sold
+  10. Back up the database
+  0. Quit
+Choose an option: 2
+Product id: 5
+ID | SKU | Name | Category | Supplier | Price | In stock | Reorder at
+5 | BM-002 | Concrete Mix 20kg | Building Materials | BuildRight Supply | 8.99 | 25 | 15
+
+Inventory menu
+  1. Search products
+  2. Look up a product
+  3. Add a product
+  4. Restock a product
+  5. Record a sale
+  6. Report: stock value by supplier
+  7. Report: low stock
+  8. Report: sales by product
+  9. Report: never sold
+  10. Back up the database
+  0. Quit
+Choose an option: 0
+(.venv) Sanket.Deshmukh@Sankets-MacBook-Pro inventory-management-system % docker volume rm inventory_data
+
+inventory_data
+(.venv) Sanket.Deshmukh@Sankets-MacBook-Pro inventory-management-system % 
+```
+
+## Self-review
+
+1. What I would do differently if I rebuilt it from scratch.
+
+- I would add more constraints in the database. Right now some fields are not checked, so invalid data could slip in. For example, `sold_at` and `occurred_at` are plain TEXT with no check, so the database accepts any string as a time. The current version works fine for the project requirements, but I would make sure no field is left unchecked or assumed to only get good input.
+- I would reduce the size of the Docker image. It is too big right now because `requirements.txt` also installs `pytest` and `ruff`.
+- I would keep a separate requirements file for development, so `pytest` and `ruff` are only installed for development and testing. Then the production image does not need them.
+
+2. One thing I am unsure about that I would want a reviewer to check.
+
+- While trying to break my code with some made-up inputs, I found that deleting a product that has no sales but has stock movements (for example, after a restock) showed the wrong message ("has sales history"). 
+- I fixed it with a separate error, and `delete_product` now runs a second query on `sale_items` after the delete fails, to decide which message to show. 
+ I am not sure this is the cleanest way to do it. I would like a reviewer to check whether this design is right, and whether the message is correct for a sold product, a restocked-only product and a product with no history.

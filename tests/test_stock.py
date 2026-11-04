@@ -12,6 +12,7 @@ from inventory_db import (
     record_sale,
     restock,
 )
+from seed_db import COUNT_ROWS_SQL
 
 # Seed data: product 1 (Claw Hammer) has 40 in stock, product 5 (Concrete Mix) has 5.
 HAMMER = 1
@@ -28,10 +29,7 @@ def stock_of(db, product_id):
 
 def snapshot(db):
     """Everything a failed sale must leave untouched: all row counts and all stock levels."""
-    counts = [
-        db.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]  # fixed table names
-        for table in ("sales", "sale_items", "stock_movements")
-    ]
+    counts = [tuple(row) for row in db.execute(COUNT_ROWS_SQL)]
     stock = db.execute("SELECT product_id, quantity_in_stock FROM products").fetchall()
     return counts, [tuple(row) for row in stock]
 
