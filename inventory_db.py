@@ -301,5 +301,5 @@ def backup_database(connection, backup_path):
 
     The copy is a consistent snapshot, even while the database is in use.
     """
-    with closing(sqlite3.connect(backup_path)) as backup:
+    with closing(connect(backup_path)) as backup:
         connection.backup(backup)
